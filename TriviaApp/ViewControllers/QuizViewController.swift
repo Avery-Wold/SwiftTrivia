@@ -21,14 +21,19 @@ class QuizViewController: UIViewController {
             correctAnswer = dictionary["correct_answer"] as! String
         }
     }
+    
     var vSpinner: UIView?
     var questions: [Question] = []
     var difficulty: String = ""
+    var categoryName: String = ""
+    var categoryId: Int = 0
     var currentQuestion: Question?
     var currentQuestionPos = 0
     var noCorrect = 0
     var allAnswers: Array<String> = []
-    
+    var urlString: String = ""
+    let bgColor = UIColor(red: 92/255, green: 2/255, blue: 192/255, alpha: 1)
+
     @IBOutlet weak var lblQuestion: UILabel!
     @IBOutlet weak var answer0: UIButton!
     @IBOutlet weak var answer1: UIButton!
@@ -36,37 +41,16 @@ class QuizViewController: UIViewController {
     @IBOutlet weak var answer3: UIButton!
     @IBOutlet weak var lblProgress: UILabel!
     
-    
     override func viewDidLoad() {
         super.viewDidLoad()
 
         // Do any additional setup after loading the view, typically from a nib.
         self.navigationItem.setHidesBackButton(true, animated: true)
-        navigationItem.title = "\(difficulty.capitalized) Questions"
+        navigationItem.title = "\(categoryName.capitalized) Questions"
+        btnSetup()
         self.showSpinnter(onView: self.view)
         getQuestionsFromJson()
         setGradientBackground()
-    }
-    
-    func showSpinnter(onView: UIView){
-        let spinnerView = UIView.init(frame: onView.bounds)
-        spinnerView.backgroundColor = UIColor.init(red: 0.5, green: 0.5, blue: 0.5, alpha: 0.5)
-        let ai = UIActivityIndicatorView.init(style: .whiteLarge)
-        ai.startAnimating()
-        ai.center = spinnerView.center
-        
-        DispatchQueue.main.async {
-            spinnerView.addSubview(ai)
-            onView.addSubview(spinnerView)
-        }
-        vSpinner = spinnerView
-    }
-    
-    func removeSpinner(){
-        DispatchQueue.main.async {
-            self.vSpinner?.removeFromSuperview()
-            self.vSpinner = nil
-        }
     }
     
     @IBAction func submitAnswer0(_ sender: Any) {
@@ -94,16 +78,23 @@ class QuizViewController: UIViewController {
     }
     
     func getQuestionsFromJson(){
-        guard let url = URL(string: "https://opentdb.com/api.php?amount=10&difficulty=\(difficulty)&type=multiple") else {return}
+        if(categoryId == 0){
+            urlString = "https://opentdb.com/api.php?amount=10&difficulty=\(difficulty)&type=multiple"
+        }
+        else {
+            urlString = "https://opentdb.com/api.php?amount=10&category=\(categoryId)&difficulty=\(difficulty)&type=multiple"
+        }
+        guard let url = URL(string: urlString) else {return}
         URLSession.shared.dataTask(with: url) { (data, response, err) in
             guard let data = data else {return}
             do {
                 guard let json = try
                     JSONSerialization.jsonObject(with: data, options: .mutableContainers) as? [String: Any] else {return}
                 
+                let responseCode = json["response_code"] as! Int
                 let questions = json["results"] as? [[String: Any]]
 
-                if(questions != nil){
+                if(questions?.isEmpty == false || responseCode == 0){
                     for question in questions! {
                         self.questions.append(Question(question))
                     }
@@ -112,11 +103,16 @@ class QuizViewController: UIViewController {
                         self.currentQuestion = self.questions[0]
                         self.setQuestion()
                     }
+                } else {
+                    self.removeSpinner()
+                    let alert = UIAlertController(title: "OOPS", message: "Category was not found, please try a different one", preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: "Ok", style: .default, handler: {action in self.performSegue(withIdentifier: "tryAgain", sender: self)}))
+                    self.present(alert, animated: true, completion: nil)
                 }
             } catch let jsonErr {
                 print("Error serializing json: ", jsonErr)
             }
-            }.resume()
+        }.resume()
     }
     
     func loadNextQuestion() {
@@ -156,7 +152,7 @@ class QuizViewController: UIViewController {
     // Set the background as a purple gradient
     func setGradientBackground() {
         let colorTop =  UIColor.black.cgColor
-        let colorBottom = UIColor.purple.cgColor
+        let colorBottom = bgColor.cgColor//UIColor.purple.cgColor
         
         let gradientLayer = CAGradientLayer()
         gradientLayer.colors = [ colorTop, colorBottom]
@@ -164,6 +160,44 @@ class QuizViewController: UIViewController {
         gradientLayer.frame = self.view.bounds
         
         self.view.layer.insertSublayer(gradientLayer, at: 0)
+    }
+    
+    // Set up spinner view
+    func showSpinnter(onView: UIView){
+        let spinnerView = UIView.init(frame: onView.bounds)
+        spinnerView.backgroundColor = UIColor.init(red: 0.5, green: 0.5, blue: 0.5, alpha: 0.5)
+        let ai = UIActivityIndicatorView.init(style: .whiteLarge)
+        ai.startAnimating()
+        ai.center = spinnerView.center
+        
+        DispatchQueue.main.async {
+            spinnerView.addSubview(ai)
+            onView.addSubview(spinnerView)
+        }
+        vSpinner = spinnerView
+    }
+    
+    func removeSpinner(){
+        DispatchQueue.main.async {
+            self.vSpinner?.removeFromSuperview()
+            self.vSpinner = nil
+        }
+    }
+    
+    // Set up answer buttons
+    func btnSetup(){
+        let buttons = [
+            self.answer0,
+            self.answer1,
+            self.answer2,
+            self.answer3
+        ]
+        for button in buttons {
+            button?.layer.backgroundColor = bgColor.cgColor
+            button?.layer.cornerRadius = 5
+            button?.layer.borderWidth = 2
+            button?.layer.borderColor = UIColor.black.cgColor
+        }
     }
     
     // Before we move to the results screen pass the how many we got correct, and the total number of questions
